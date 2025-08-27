@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Workout Tracker</title>
+
+<!-- Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins', sans-serif; }
+  body { background: linear-gradient(135deg, #1e3c72, #2a5298); color:#fff; min-height:100vh; padding:20px; transition:background 0.3s, color 0.3s; }
+
+  header { text-align:center; margin-bottom:20px; }
+  header h1 { font-size:2rem; margin-bottom:5px; }
+  header p { opacity:0.8; }
+
+  form { display:flex; flex-direction:column; gap:15px; max-width:500px; margin:0 auto; background: rgba(255,255,255,0.1); padding:20px; border-radius:20px; backdrop-filter:blur(10px); transition: background 0.3s; }
+  form input, form select { padding:10px; border-radius:12px; border:none; font-size:1rem; }
+  form button { padding:10px; border:none; border-radius:12px; background:#ff6b6b; color:#fff; font-weight:600; cursor:pointer; transition:transform 0.3s; }
+  form button:hover { transform:scale(1.05); }
+
+  .filters { max-width:500px; margin:15px auto; display:flex; gap:10px; }
+  .filters select, .filters input { flex:1; padding:10px; border-radius:12px; border:none; font-size:1rem; }
+
+  table { width:100%; margin-top:20px; border-collapse:collapse; }
+  th, td { padding:10px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.2); }
+  th { font-size:1rem; }
+  td { font-size:0.95rem; }
+  .action-btn { cursor:pointer; padding:5px 10px; border-radius:10px; border:none; margin:2px; font-weight:600; transition:transform 0.3s; }
+  .edit-btn { background:orange; color:#fff; }
+  .edit-btn:hover { transform:scale(1.1); }
+  .delete-btn { background:red; color:#fff; }
+  .delete-btn:hover { transform:scale(1.1); }
+
+  .emoji { font-size:2rem; display:inline-block; animation:bounce 2s infinite; }
+
+  @keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{transform:translateY(-10px);} }
+
+  footer { margin-top:30px; text-align:center; font-size:1rem; opacity:0.9; font-style:italic; }
+
+  .back-btn {
+    display:inline-block;
+    margin-top:15px;
+    padding:10px 20px;
+    background:#4CAF50;
+    color:#fff;
+    border-radius:12px;
+    text-decoration:none;
+    font-weight:600;
+    transition:transform 0.3s, background 0.3s;
+  }
+  .back-btn:hover {
+    background:#45a049;
+    transform:scale(1.1);
+  }
+
+  @media (max-width:600px){
+    form { width:100%; padding:15px; }
+    .filters { flex-direction:column; }
+    th, td { font-size:0.8rem; }
+    .emoji { font-size:1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏋️‍♂️ Workout Tracker</h1>
+  <p>Manage your daily exercises 💪</p>
+</header>
+
+<form id="workoutForm">
+  <input type="text" id="exercise" placeholder="Exercise Name" required>
+  <input type="number" id="reps" placeholder="Reps" min="1" required>
+  <input type="number" id="sets" placeholder="Sets" min="1" required>
+  <input type="text" id="duration" placeholder="Duration (e.g., 30min)" required>
+  <select id="category" required>
+    <option value="">Select Category</option>
+    <option value="Cardio">Cardio</option>
+    <option value="Strength">Strength</option>
+    <option value="Yoga">Yoga</option>
+  </select>
+  <button type="submit">Add Workout</button>
+</form>
+
+<div class="filters">
+  <select id="filterCategory">
+    <option value="All">All Categories</option>
+    <option value="Cardio">Cardio</option>
+    <option value="Strength">Strength</option>
+    <option value="Yoga">Yoga</option>
+  </select>
+  <input type="text" id="searchBar" placeholder="Search Exercise...">
+</div>
+
+<table id="workoutTable">
+  <thead>
+    <tr>
+      <th>Exercise</th>
+      <th>Reps</th>
+      <th>Sets</th>
+      <th>Duration</th>
+      <th>Category</th>
+      <th>Calories</th>
+      <th>Emoji</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+  </tbody>
+</table>
+
+<footer id="quoteBox">💡 Stay strong, stay consistent!</footer>
+
+<!-- Back to Dashboard Button -->
+<div style="text-align:center;">
+  <a href="home.html" class="back-btn">⬅️ Back to Dashboard</a>
+</div>
+
+<script>
+  const workoutForm = document.getElementById('workoutForm');
+  const workoutTable = document.getElementById('workoutTable').querySelector('tbody');
+  const filterCategory = document.getElementById('filterCategory');
+  const searchBar = document.getElementById('searchBar');
+
+  let workouts = JSON.parse(localStorage.getItem('workouts')) || [];
+  let editIndex = null;
+
+  const emojiMap = {
+    'Pushup':'💪', 'Squat':'🏋️‍♂️', 'Running':'🏃‍♂️', 'Yoga':'🧘‍♂️', 'Plank':'🔥', 'Cycling':'🚴‍♂️', 'Default':'🏋️‍♀️'
+  };
+
+  const calorieRates = {
+    'Pushup':7, 'Squat':8, 'Running':10, 'Yoga':4, 'Plank':5, 'Cycling':9, 'Default':6
+  };
+
+  const quotes = [
+    "💡 Push yourself, no one else is going to do it for you.",
+    "🔥 Every workout counts, no matter how small.",
+    "🏆 Consistency is the key to success.",
+    "💪 Sweat now, shine later.",
+    "🚀 The body achieves what the mind believes."
+  ];
+
+  function renderTable(){
+    workoutTable.innerHTML = '';
+    let filter = filterCategory.value;
+    let search = searchBar.value.toLowerCase();
+
+    workouts.forEach((w,i)=>{
+      if((filter==="All" || w.category===filter) && w.exercise.toLowerCase().includes(search)){
+        const emoji = emojiMap[w.exercise] || emojiMap['Default'];
+        const calRate = calorieRates[w.exercise] || calorieRates['Default'];
+        let minutes = parseInt(w.duration) || 0;
+        const calories = calRate * minutes;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+          <td>${w.exercise}</td>
+          <td>${w.reps}</td>
+          <td>${w.sets}</td>
+          <td>${w.duration}</td>
+          <td>${w.category}</td>
+          <td>${calories} kcal</td>
+          <td class="emoji">${emoji}</td>
+          <td>
+            <button class="action-btn edit-btn" onclick="editWorkout(${i})">Edit</button>
+            <button class="action-btn delete-btn" onclick="deleteWorkout(${i})">Delete</button>
+          </td>
+        `;
+        workoutTable.appendChild(row);
+      }
+    });
+  }
+
+  function saveLocalStorage(){
+    localStorage.setItem('workouts', JSON.stringify(workouts));
+  }
+
+  workoutForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    const exercise = document.getElementById('exercise').value.trim();
+    const reps = document.getElementById('reps').value.trim();
+    const sets = document.getElementById('sets').value.trim();
+    const duration = document.getElementById('duration').value.trim();
+    const category = document.getElementById('category').value;
+
+    if(editIndex !== null){
+      workouts[editIndex] = {exercise,reps,sets,duration,category};
+      editIndex = null;
+    } else {
+      workouts.push({exercise,reps,sets,duration,category});
+    }
+
+    saveLocalStorage();
+    renderTable();
+    workoutForm.reset();
+  });
+
+  function editWorkout(i){
+    editIndex = i;
+    document.getElementById('exercise').value = workouts[i].exercise;
+    document.getElementById('reps').value = workouts[i].reps;
+    document.getElementById('sets').value = workouts[i].sets;
+    document.getElementById('duration').value = workouts[i].duration;
+    document.getElementById('category').value = workouts[i].category;
+  }
+
+  function deleteWorkout(i){
+    workouts.splice(i,1);
+    saveLocalStorage();
+    renderTable();
+  }
+
+  // Random Quote
+  function showQuote(){
+    const random = Math.floor(Math.random()*quotes.length);
+    document.getElementById('quoteBox').textContent = quotes[random];
+  }
+
+  filterCategory.addEventListener('change', renderTable);
+  searchBar.addEventListener('input', renderTable);
+
+  // Initial
+  renderTable();
+  showQuote();
+</script>
+
+</body>
+</html>

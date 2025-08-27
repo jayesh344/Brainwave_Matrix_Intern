@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Run Tracker</title>
+
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+* { margin:0; padding:0; box-sizing:border-box; font-family:'Poppins', sans-serif; }
+body { background: linear-gradient(135deg, #1e3c72, #2a5298); color:#fff; min-height:100vh; padding:20px; display:flex; flex-direction:column; align-items:center; transition: background 0.3s, color 0.3s; }
+body.light-mode { background:#f5f5f5; color:#333; }
+
+header { text-align:center; margin-bottom:25px; }
+header h1 { font-size:2rem; margin-bottom:5px; animation:fadeInDown 1s ease-in-out; }
+header p { opacity:0.9; margin-bottom:15px; }
+
+form { background: rgba(255,255,255,0.1); backdrop-filter:blur(10px); padding:25px; border-radius:20px; width:100%; max-width:500px; display:flex; flex-direction:column; gap:15px; animation:fadeInUp 1s ease-in-out; }
+form input { padding:12px; border-radius:12px; border:none; font-size:1rem; }
+form button { padding:12px; border:none; border-radius:12px; background:#ff6b6b; color:#fff; font-weight:600; cursor:pointer; transition: transform 0.3s; font-size:1rem; }
+form button:hover { transform:scale(1.05); }
+
+#runTable { width:100%; max-width:600px; margin-top:25px; border-collapse:collapse; }
+#runTable th, #runTable td { padding:10px; text-align:center; border-bottom:1px solid rgba(255,255,255,0.2); }
+#runTable th { font-size:1rem; }
+#runTable td { font-size:0.95rem; }
+.action-btn { cursor:pointer; padding:5px 10px; border-radius:10px; border:none; margin:2px; font-weight:600; transition:transform 0.3s; }
+.edit-btn { background:orange; color:#fff; }
+.edit-btn:hover { transform:scale(1.1); }
+.delete-btn { background:red; color:#fff; }
+.delete-btn:hover { transform:scale(1.1); }
+
+.emoji { font-size:2.5rem; display:inline-block; animation:bounce 2s infinite; }
+@keyframes bounce { 0%,100%{ transform:translateY(0);} 50%{transform:translateY(-10px);} }
+@keyframes fadeInDown { from {opacity:0; transform:translateY(-50px);} to {opacity:1; transform:translateY(0);} }
+@keyframes fadeInUp { from {opacity:0; transform:translateY(50px);} to {opacity:1; transform:translateY(0);} }
+
+.chart-container { width:100%; max-width:700px; margin-top:30px; }
+.chart-container canvas { width:100% !important; height:auto !important; background: rgba(255,255,255,0.1); border-radius: 20px; padding: 20px; }
+
+/* Mobile Optimizations */
+@media (max-width:600px){
+  form, .chart-container { width:100%; }
+  header h1 { font-size:1.8rem; }
+  .emoji { font-size:2rem; }
+
+  /* Buttons larger for touch */
+  form button, .action-btn { padding:15px; font-size:1.1rem; }
+
+  /* Table horizontally scrollable */
+  #runTable { display:block; overflow-x:auto; white-space:nowrap; }
+  #runTable th, #runTable td { min-width:120px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🏃‍♂️ Run Tracker</h1>
+  <p>Track your running distance, time & pace dynamically 💨</p>
+</header>
+
+<form id="runForm">
+  <input type="number" id="distance" placeholder="Distance (km)" min="0" step="0.01" required>
+  <input type="time" id="time" placeholder="Duration (hh:mm:ss)" required>
+  <input type="text" id="pace" placeholder="Pace (min/km)" readonly>
+  <button type="submit">Add Run 🏅</button>
+  <button type="button" id="gpsBtn">📍 Start GPS Run</button>
+</form>
+ 
+<div style="text-align:center;">
+  <a href="home.html" class="back-btn">⬅️ Back to Dashboard</a>
+</div>
+<table id="runTable">
+  <thead>
+    <tr>
+      <th>Distance</th>
+      <th>Time</th>
+      <th>Pace</th>
+      <th>Emoji</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div class="chart-container">
+  <canvas id="runChart"></canvas>
+</div>
+
+<script>
+const runForm = document.getElementById('runForm');
+const runTable = document.getElementById('runTable').querySelector('tbody');
+const distanceInput = document.getElementById('distance');
+const timeInput = document.getElementById('time');
+const paceInput = document.getElementById('pace');
+const gpsBtn = document.getElementById('gpsBtn');
+
+let runs = JSON.parse(localStorage.getItem('runs')) || [];
+let editIndex = null;
+
+function calculatePace(dist, time){
+  const [h,m,s] = time.split(':').map(Number);
+  const totalMin = h*60 + m + s/60;
+  return (totalMin/dist).toFixed(2) + " min/km";
+}
+
+function renderTable(){
+  runTable.innerHTML = '';
+  runs.forEach((r,i)=>{
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${r.distance} km</td>
+      <td>${r.time}</td>
+      <td>${r.pace}</td>
+      <td class="emoji">🏃‍♂️</td>
+      <td>
+        <button class="action-btn edit-btn" onclick="editRun(${i})">Edit</button>
+        <button class="action-btn delete-btn" onclick="deleteRun(${i})">Delete</button>
+      </td>
+    `;
+    runTable.appendChild(row);
+  });
+  renderChart();
+}
+
+function saveLocalStorage(){
+  localStorage.setItem('runs', JSON.stringify(runs));
+}
+
+runForm.addEventListener('submit', (e)=>{
+  e.preventDefault();
+  const distance = parseFloat(distanceInput.value);
+  const time = timeInput.value;
+  const pace = calculatePace(distance,time);
+
+  if(editIndex !== null){
+    runs[editIndex] = {distance,time,pace};
+    editIndex = null;
+  } else {
+    runs.push({distance,time,pace});
+  }
+
+  saveLocalStorage();
+  renderTable();
+  runForm.reset();
+  paceInput.value = '';
+});
+
+function editRun(i){
+  editIndex = i;
+  distanceInput.value = runs[i].distance;
+  timeInput.value = runs[i].time;
+  paceInput.value = runs[i].pace;
+}
+
+function deleteRun(i){
+  runs.splice(i,1);
+  saveLocalStorage();
+  renderTable();
+}
+
+// Dynamic Pace Calculation on time or distance input
+distanceInput.addEventListener('input',updatePace);
+timeInput.addEventListener('input',updatePace);
+function updatePace(){
+  if(distanceInput.value && timeInput.value){
+    paceInput.value = calculatePace(parseFloat(distanceInput.value), timeInput.value);
+  }
+}
+
+// GPS Tracking (optional)
+gpsBtn.addEventListener('click', ()=>{
+  if(navigator.geolocation){
+    gpsBtn.textContent = '📍 Tracking...';
+    let startTime = Date.now();
+    let totalDistance = 0;
+    let watchID = navigator.geolocation.watchPosition(pos=>{
+      totalDistance += 0.05; 
+      const elapsedSec = (Date.now() - startTime)/1000;
+      const min = Math.floor(elapsedSec/60).toString().padStart(2,'0');
+      const sec = Math.floor(elapsedSec%60).toString().padStart(2,'0');
+      timeInput.value = `00:${min}:${sec}`;
+      distanceInput.value = totalDistance.toFixed(2);
+      paceInput.value = calculatePace(totalDistance,timeInput.value);
+    });
+    setTimeout(()=>{
+      navigator.geolocation.clearWatch(watchID);
+      gpsBtn.textContent = '📍 Start GPS Run';
+      alert('GPS Run Finished!');
+    },60000); 
+  } else {
+    alert('GPS not supported in your browser.');
+  }
+});
+
+// Chart.js - Run Distance Weekly
+const ctx=document.getElementById('runChart').getContext('2d');
+let runChart = new Chart(ctx,{
+  type:'line',
+  data:{ labels:[], datasets:[{label:'Distance (km)', data:[], borderColor:'rgba(54,162,235,1)', backgroundColor:'rgba(54,162,235,0.2)', tension:0.3, fill:true, pointRadius:5 }] },
+  options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'white'}}}, scales:{x:{ticks:{color:'white'}},y:{ticks:{color:'white'}}} }
+});
+
+function renderChart(){
+  const labels = runs.map((r,i)=>`Run ${i+1}`);
+  const data = runs.map(r=>r.distance);
+  runChart.data.labels = labels;
+  runChart.data.datasets[0].data = data;
+  runChart.update();
+}
+
+// Initial
+renderTable();
+</script>
+</body>
+</html>
